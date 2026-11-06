@@ -1,0 +1,61 @@
+# Manual deploy to a real AWS account. Needs, per GitHub environment (dev, prod):
+#   variables AWS_DEPLOY_ROLE_ARN (output of infra/bootstrap) and TF_STATE_BUCKET.
+# Authentication is OIDC: GitHub issues a short-lived token, AWS exchanges it for role
+# credentials. No access keys are stored anywhere. Protect "prod" with required reviewers.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        default: dev
+      apply:
+        description: Apply the plan (otherwise plan only)
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.17"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: sa-east-1
+      - name: Init
+        run: |
+          terraform init -input=false \
+            -backend-config=environments/backend-${{ inputs.environment }}.hcl \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+      - name: Plan
+        run: terraform plan -input=false -var-file=environments/${{ inputs.environment }}.tfvars -out=tfplan
+      - name: Apply
+        if: inputs.apply
+        run: terraform apply -input=false tfplan
+      - name: Smoke test the deployed pipeline
+        if: inputs.apply
+        working-directory: .
+        run: |
+          pip install boto3
+          python scripts/smoke_test.py \
+            --bucket "$(terraform -chdir=infra output -raw inbox_bucket)" \
+            --api-url "$(terraform -chdir=infra output -raw api_url)" \
+            --api-key-id "$(terraform -chdir=infra output -json api_key_ids | python -c 'import json,sys; print(list(json.load(sys.stdin).values())[0])')"
