@@ -36,4 +36,9 @@ run "deploy_role_trusts_only_this_repository_and_its_environments" {
     condition     = one(aws_s3_bucket_versioning.state.versioning_configuration).status == "Enabled"
     error_message = "State must be versioned."
   }
+
+  assert {
+    condition     = aws_kms_key.state.enable_key_rotation
+    error_message = "The state key must rotate."
+  }
 }

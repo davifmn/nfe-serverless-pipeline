@@ -53,11 +53,24 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# State files can contain secrets and resource details, so they get their own key.
+resource "aws_kms_key" "state" {
+  description             = "Terraform state of nfe-serverless-pipeline"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+resource "aws_kms_alias" "state" {
+  name          = "alias/nfe-terraform-state"
+  target_key_id = aws_kms_key.state.key_id
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "aws:kms"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.state.arn
     }
     bucket_key_enabled = true
   }
@@ -142,6 +155,11 @@ resource "aws_iam_role_policy" "project_roles" {
 
 output "state_bucket" {
   value = aws_s3_bucket.state.bucket
+}
+
+output "state_kms_key_arn" {
+  description = "Set as kms_key_id in environments/backend-<env>.hcl."
+  value       = aws_kms_key.state.arn
 }
 
 output "deploy_role_arn" {
