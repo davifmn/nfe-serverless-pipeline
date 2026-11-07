@@ -121,7 +121,8 @@ run "table_matches_the_application_access_patterns" {
 
   assert {
     condition = anytrue([
-      for g in aws_dynamodb_table.invoices.global_secondary_index : g.name == "GSI1" && g.hash_key == "GSI1PK" && g.range_key == "GSI1SK"
+      for g in aws_dynamodb_table.invoices.global_secondary_index :
+      g.name == "GSI1" && contains([for k in g.key_schema : "${k.key_type}:${k.attribute_name}"], "HASH:GSI1PK") && contains([for k in g.key_schema : "${k.key_type}:${k.attribute_name}"], "RANGE:GSI1SK")
     ])
     error_message = "GSI1 (issuer + date) is required by the issuer query."
   }

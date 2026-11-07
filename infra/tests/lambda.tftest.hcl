@@ -25,7 +25,7 @@ run "runtime_tracing_and_logs" {
   }
 
   assert {
-    condition     = aws_lambda_function.this.runtime == "python3.13" && aws_lambda_function.this.architectures == ["arm64"]
+    condition     = aws_lambda_function.this.runtime == "python3.13" && contains(aws_lambda_function.this.architectures, "arm64")
     error_message = "Functions run Python 3.13 on Graviton (arm64)."
   }
 
